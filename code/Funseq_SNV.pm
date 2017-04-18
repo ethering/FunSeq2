@@ -491,53 +491,81 @@ sub motif_gain{
 	}
 	close SCORE;
 	
+	#create a hash of sequence lengths from the reference sequence
+	my %seq_lengths;
+	my $input_seqs = Bio::SeqIO->new ( '-format' => 'Fasta' , '-file'   => $reference_file);
+	while ( my $seq = $input_seqs->next_seq() )
+	{
+		my $seq_name = $seq->display_id();
+		my $seqLength = length($seq->seq());
+		$seq_lengths{$seq_name}=$seqLength;
+	}
+	
+	# retrieve + & - 29bp around the SNP & gain of motif calculation;
 
-	
-	# retrieve + & - 29bp around the SNP & gain of motif calculation; 
-	
-	foreach $id(sort keys %{$self->{GENE}}){
+	foreach $id(sort keys %{$self->{GENE}})
+	{
 		my $switch = 0;
-		foreach my $gene(keys %{$self -> {GENE}->{$id}}){
-			if (defined $self ->{GENE} ->{$id} ->{$gene} -> {"Promoter"} || defined $self ->{GENE}->{$id}->{$gene}->{"Distal"}){
+		foreach my $gene(keys %{$self -> {GENE}->{$id}})
+		{
+			if (defined $self ->{GENE} ->{$id} ->{$gene} -> {"Promoter"} || defined $self ->{GENE}->{$id}->{$gene}->{"Distal"})
+			{
 				$switch = 1;
 			}
 		}
-		if ($switch == 1){
+		if ($switch == 1)
+		{
 			@des = split /\s+/,$self->{DES}->{$id};
 			push @id,$id;
 			$chr = $des[0];
-			$chr =~ s/chr//g;
+			my $chr_length = $seq_lengths{$chr};
+			# $chr =~ s/chr//g;
 			$start = $des[1];
-			$snp_file .= join("",$chr,"\t",$start-29,"\t",$start+30,"\n");
+			my $search_start = 0;
+			if ($start > 29)
+			{
+			
+				$search_start = $start - 29;
+			}
+			my $search_end = $start+30;
+			if ($search_end > $chr_length)
+			{
+				$search_end = $chr_length;
+			}
+			
+			$snp_file .= join("",$chr,"\t",$search_start,"\t",$search_end,"\n");
 			push @ref,uc($des[3]);
 			push @alt,uc($des[4]);
-			push @start,$start;
+			# push @start,$start;
+			push @start,$search_start;
+			}
 		}
-	}
-
-	open(O,">$out_tmp")||die;
-	print O $snp_file;
-	close O;
-	
-	if (-s $out_tmp){
-	
+		
+		open(O,">$out_tmp")||die;
+		print O $snp_file;
+		close O;
+		
+		if (-s $out_tmp){
+		
 		@des = split /\n/, `fastaFromBed -fi $reference_file -bed $out_tmp -fo stdout`;
-	
-		if (scalar @des >0){
-			for $i (0 .. (scalar @des/2)-1){
+		
+		if (scalar @des >0)
+		{
+			for $i (0 .. (scalar @des/2)-1)
+			{
 				$ref = $ref[$i]; $alt = $alt[$i];
 				$id = $id[$i]; $start = $start[$i];
 				$extract_seq=uc($des[$i*2+1]);
 				@extract_seq = split //,$extract_seq;
-				$extract_seq[29] = $alt;	
-			
-			#positive strand
+				$extract_seq[29] = $alt;
+				
+				#positive strand
 				&seq_scan(\@extract_seq,"+");
-		
-			#negative strand
+				
+				#negative strand
 				$extract_seq =~ tr/ATCGatcg/TAGCTAGC/;
 				@extract_seq = reverse(split //,$extract_seq);
-				$ref =~ tr/ATCGatcg/TAGCTAGC/; 
+				$ref =~ tr/ATCGatcg/TAGCTAGC/;
 				$alt =~ tr/ATCGatcg/TAGCTAGC/;
 				$extract_seq[29] = $alt;
 				&seq_scan(\@extract_seq,"-");
